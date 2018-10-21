@@ -1,0 +1,15 @@
+Datas/*
+MIREXresults/*
+__pycache__/*
+chainer2.0/*
+chordino/*
+convnet_model24/*
+logs/*
+*.wav
+*.zip
+*.model
+*.png
+*.npy
+*.npz
+*.so
+*.sf2
