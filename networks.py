@@ -10,6 +10,7 @@ from chainer import Chain,serializers,ChainList,Variable,cuda
 import chainer.links as L
 import chainer.functions as F
 import const
+import utils
 
 import numpy as np
 cp = cuda.cupy
@@ -30,41 +31,6 @@ class ResBlock(Chain):
         h = F.leaky_relu(self.norm2(self.conv2(h)))
         h = F.leaky_relu(self.norm3(self.conv3(h))+x)
         return h
-
-class ConvnetFeatExtractor(Chain):
-    def __init__(self):
-        super(ConvnetFeatExtractor,self).__init__()
-        with self.init_scope():
-            self.conv1 = L.Convolution2D(const.CQT_H,32,(5,1),(1,1),(2,0))
-            self.res1 = ResBlock(32,(5,5),1,(2,2))
-            self.res2 = ResBlock(32,(5,5),1,(2,2))
-            self.conv2 = L.Convolution2D(32,64,(3,const.OCTAVE*12),1,(1,0))  #(batch,128,T,1)
-            #self.lnorm = L.LayerNormalization(64)
-            self.out = L.Linear(64,36)
-            
-        
-    def __call__(self,x):
-        h1 = F.leaky_relu(self.conv1(x))
-        h1 = self.res1(h1)
-        h1 = self.res2(h1)
-        h1 = F.tanh(F.dropout(self.conv2(h1)))
-        o_list = [self.out(s) for s in F.separate(h1[:,:,:,0],axis=2)]
-        #o = F.sigmoid(self.out(F.transpose(F.concat(F.separate(h1[:,:,:,0],axis=0),axis=1))))
-        return F.stack(o_list,axis=1)
-    
-    def GetFeature(self,x):
-        o = F.sigmoid(self(x[None,:,:,:]))
-        return o[0,:,:]
-        #return Variable(x[0,:,:])
-        
-    def GetFeatureSeq(self,x):
-        o = self(x[None,:,:,:])
-        o.unchain_backward()
-        return F.separate(o,axis=1)
-    def save(self,fname=const.DEFAULT_CONVNETFILE):
-        serializers.save_npz(fname,self)
-    def load(self,fname=const.DEFAULT_CONVNETFILE):
-        serializers.load_npz(fname,self)
 
 
 class FullCNNFeatExtractor(Chain):
@@ -163,42 +129,6 @@ class DNNModel(Chain):
         #self.loss = F.mean_squared_error(F.sigmoid(y),t)
         return self.loss
 
-class TripleDNNExtractor(Chain):
-    def __init__(self):
-        super(TripleDNNExtractor,self).__init__()
-        with self.init_scope():
-            self.dnn_top = FeatureDNN()
-            self.dnn_middle = FeatureDNN()
-            self.dnn_bass = FeatureDNN()
-    def __call__(self,x):
-        y_bass = self.dnn_bass(x)
-        y_middle = F.sigmoid(self.dnn_middle(x))
-        y_top = self.dnn_top(x)
-        return y_bass,y_middle,y_top
-    
-    def GetFeature(self,x):
-        y_bass = F.softmax(self.dnn_bass(x))
-        y_middle = F.sigmoid(self.dnn_middle(x))
-        y_top = F.softmax(self.dnn_top(x))
-        return F.concat([y_bass,y_middle,y_top],axis=1)      
-    def save(self,fname=const.DEFAULT_DNNFILE):
-        serializers.save_npz(fname,self)
-    def load(self,fname=const.DEFAULT_DNNFILE):
-        serializers.load_npz(fname,self)       
-    
-    
-class TripleDNNPredictor(Chain):
-    def __init__(self,predictor):
-        super(TripleDNNPredictor,self).__init__()
-        with self.init_scope():
-            self.predictor = predictor
-            
-    def __call__(self,x,t_bass,t_middle,t_top):
-        y_bass,y_middle,y_top = self.predictor(x)
-        self.loss_bass = F.softmax_cross_entropy(y_bass,t_bass)
-        self.loss_middle = F.mean_squared_error(y_middle,t_middle)
-        self.loss_top = F.softmax_cross_entropy(y_top,t_top)
-        return self.loss_bass,self.loss_middle,self.loss_top
 
 
 class ConvnetChordClassifier(Chain):
@@ -220,33 +150,7 @@ class ConvnetChordClassifier(Chain):
         serializers.save_npz(fname,self)
     def load(self,fname="convclassifier.model"):
         serializers.load_npz(fname,self)        
-
-class BidirectionalRNN(Chain):
-    def __init__(self):
-        super(BidirectionalRNN,self).__init__()
-        with self.init_scope():
-            self.mid1 = L.LSTM(36,128)
-            self.mid1_rev = L.LSTM(36,128)
-            self.out = L.Linear(256,const.N_CHORDS)
-    
-    def reset_state(self):
-        self.mid1.reset_state()
-        self.mid1_rev.reset_state()
-    def __call__(self,seq):        
-        _seq = seq
-        _seq_rev = _seq[::-1]
-        
-        out1 = [self.mid1(x) for x in _seq]
-        out1_rev = [self.mid1_rev(x) for x in _seq_rev]
-        out = []
-        for y1,y1_rev in zip(out1,out1_rev[::-1]):
-            out.append(self.out(F.dropout(F.concat((y1,y1_rev),axis=1))))
-        return out
-    
-    def save(self,fname="rnn.model"):
-        serializers.save_npz(fname,self)
-    def load(self,fname="rnn.model"):
-        serializers.load_npz(fname,self)    
+ 
 
 class NSBLSTM(Chain):
     def __init__(self):
@@ -304,7 +208,7 @@ class NBLSTMCRF(Chain):
         #y_t = F.transpose_sequence([self.li(y) for y in ys])
         y_t = F.transpose_sequence(ys)
         _,path = self.crf.argmax(y_t)
-        return cp.asnumpy(path).flatten().astype(np.int32)
+        return utils.force_numpy(path).flatten().astype(np.int32)
     def argmax_rnn(self,x):
         y = self.blstm.GetFeat([Variable(x)])[0]
         path = F.argmax(y,axis=1).data
@@ -316,25 +220,6 @@ class NBLSTMCRF(Chain):
         serializers.load_npz(fname,self)
         #self.blstm.dropout = 0.0
 
-class RNNDecoder(Chain):
-    def __init__(self):
-        super(RNNDecoder,self).__init__()
-        with self.init_scope():
-            self.rnn = BidirectionalRNN()
-    def __call__(self,x_list,t_list):
-        self.rnn.reset_state()
-        y_list = self.rnn(x_list)
-        self.loss = sum([F.softmax_cross_entropy(y,t,normalize=False,reduce="mean") for y,t in zip(y_list,t_list)])
-        return self.loss
-    def argmax(self,x_list):
-        self.rnn.reset_state()
-        y_list = self.rnn(x_list)
-        path = [np.argmax(y[0].data) for y in y_list]
-        return np.array(path,dtype="int32")
-    def save(self,fname="rnn.model"):
-        serializers.save_npz(fname,self.rnn)
-    def load(self,fname="rnn.model"):
-        serializers.load_npz(fname,self.rnn)
 
 class ConvnetDecoder(Chain):
     def __init__(self):

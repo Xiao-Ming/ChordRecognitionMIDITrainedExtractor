@@ -17,59 +17,6 @@ import utils
 from chromatemplate import GetMultiFeatureFromPianoroll,GetTargetsFromPianoroll,GetConvnetTargetFromPianoroll
 import ChordVocabulary as voc
 
-def TrainConvnetExtractorSplit(trainidx,epoch=20,saveas="convnet.model"):
-    cqtfilelist = np.array(find_files(const.PATH_MIDIHCQT,ext="npz"))[trainidx]
-    #midifilelist = find_files(const.PATH_MIDI,ext="mid")[:filecnt]
-    filecnt = cqtfilelist.size
-    config.train = True
-    config.enable_backprop = True
-    convnet = networks.ConvnetFeatExtractor()
-    model =networks.ConvnetPredictor(convnet)
-    model.to_gpu(0)
-    opt = optimizers.Adam()
-    opt.setup(model)
-    spl = np.arange(0,filecnt,3000)
-    if spl[-1] < filecnt:
-        spl = np.append(spl,filecnt)
-    
-    print("split count:%d" % (spl.size-1))
-    print(spl)
-    print("start epochs...")
-    for ep in range(epoch):
-        sum_loss = 0
-        for s in range(spl.size-1):
-            print("split %d..." % (s+1))
-            S = []
-            T = []
-            filecnt = spl[s+1]-spl[s]
-            
-            for cqtfile in cqtfilelist[spl[s]:spl[s+1]]:
-                dat = np.load(cqtfile)
-                spec = utils.PreprocessSpec(dat["spec"])
-                targ = GetConvnetTargetFromPianoroll(dat["target"])
-                assert(spec.shape[1]==targ.shape[0])
-                S.append(spec)
-                T.append(targ)
-            S = np.concatenate(S,axis=1)
-            T = np.concatenate(T,axis=0)
-            
-            assert(S.shape[1]==T.shape[0])
-            randidx = np.random.randint(0,S.shape[1]-const.CONV_TRAIN_SEQLEN-1,S.shape[1]//const.CONV_TRAIN_SEQLEN*4)
-            for i in range(0,randidx.size-const.CONV_TRAIN_BATCH,const.CONV_TRAIN_BATCH):
-                x_batch = np.stack([S[:,randidx[j]:randidx[j]+const.CONV_TRAIN_SEQLEN,:] for j in range(i,i+const.CONV_TRAIN_BATCH)])
-                t_batch = np.stack([T[randidx[j]:randidx[j]+const.CONV_TRAIN_SEQLEN,:] for j in range(i,i+const.CONV_TRAIN_BATCH)])
-                x_in = cp.asarray(x_batch)
-                t_in = cp.asarray(t_batch)
-                model.cleargrads()
-                loss = model(x_in,t_in)
-                loss.backward()
-                opt.update()
-                sum_loss += loss.data
-                
-        convnet.save(saveas)
-        print("epoch: %d/%d  loss:%.04f" % (ep+1,epoch,sum_loss/const.CONV_TRAIN_BATCH))
-        
-    convnet.save(saveas)
 
 def TrainConvnetExtractor(trainidx,epoch=20,saveas="convnet.model"):
     cqtfilelist = np.array(find_files(const.PATH_MIDIHCQT,ext="npz"))[trainidx]
@@ -256,89 +203,6 @@ def TrainTranscribeDNNChord(idx,epoch=20,saveas="dnn_deepchroma.model"):
     
     dnn.save(saveas)    
 
-def TrainRNN(idx,epoch=20):
-    cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))[idx]
-    chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext="lab"))[idx]
-    chainer.config.train=False
-    chainer.config.enable_backprop = False
-    #dnn = networks.TripleDNNExtractor()
-    dnn = networks.ConvnetFeatExtractor()
-    dnn.load()
-    dnn.to_gpu(0)
-    
-    rnn = networks.RNNDecoder()
-    rnn.to_gpu(0)
-    opt = optimizers.RMSprop()
-    opt.setup(rnn)
-    #opt.add_hook(optimizer.WeightDecay(0.001))
-    X = []
-    T = []
-    for cqtfile,labfile in zip(cqtfilelist,chordlablist):
-        cqt= utils.PreprocessSpec(np.load(cqtfile))
-        feature = cp.asnumpy(dnn.GetFeature(cp.asarray(cqt)).data)
-        lab = utils.LoadLabelArr(labfile)
-        min_sz = min([feature.shape[0],lab.shape[0]])
-        X.append(utils.MeanVarNormalize(feature[:min_sz,:]))
-        T.append(lab[:min_sz])
-    X = np.concatenate(X,axis=0)
-    T = np.concatenate(T,axis=0)
-    assert(X.shape[0] == T.shape[0])
-    print("start epoch:")
-    chainer.config.train=True
-    chainer.config.enable_backprop = True
-    for ep in range(epoch):
-        sum_loss = 0.0
-        startidx = np.random.randint(0,X.shape[0]-const.DECODER_TRAIN_SEQLEN-1,size=X.shape[0]//const.DECODER_TRAIN_SEQLEN*4)
-        for i in range(0,startidx.size,const.DECODER_TRAIN_BATCH):
-            x_batch_list = [cp.asarray(X[startidx[i:i+const.DECODER_TRAIN_BATCH]+j,:]) for j in range(const.DECODER_TRAIN_SEQLEN)]
-            t_batch_list = [cp.asarray(T[startidx[i:i+const.DECODER_TRAIN_BATCH]+j]) for j in range(const.DECODER_TRAIN_SEQLEN)]
-            opt.update(rnn,x_batch_list,t_batch_list)
-            sum_loss += rnn.loss.data * const.DECODER_TRAIN_BATCH
-        print("epoch %d/%d loss=%.3f" % (ep+1,epoch,sum_loss/12800.0))        
-    rnn.rnn.save()
-
-
-def TrainCRF(idx,epoch=20):
-    cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))[idx]
-    chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext="lab"))[idx]
-    chainer.config.train=False
-    chainer.config.enable_backprop = False
-    #dnn = networks.TripleDNNExtractor()
-    dnn = networks.ConvnetFeatExtractor()
-    dnn.load()
-    dnn.to_gpu(0)
-    
-    rnn = networks.BidirectionalRNN()
-    rnn.load()
-    rnncrfmodel = networks.RNNCRFModel(rnn.copy())
-    rnncrfmodel.to_gpu(0)
-    opt = optimizers.RMSprop()
-    opt.setup(rnncrfmodel)
-    X = []
-    T = []
-    for cqtfile,labfile in zip(cqtfilelist,chordlablist):
-        cqt= utils.PreprocessSpec(np.load(cqtfile))
-        feature = cp.asnumpy(dnn.GetFeature(cp.asarray(cqt)).data)
-        lab = utils.LoadLabelArr(labfile)
-        min_sz = min([feature.shape[0],lab.shape[0]])
-        X.append(utils.MeanVarNormalize(feature[:min_sz,:]))
-        T.append(lab[:min_sz])
-    X = np.concatenate(X,axis=0)
-    T = np.concatenate(T,axis=0)
-    assert(X.shape[0]==T.shape[0])
-    print("start epoch:")
-    chainer.config.train=False
-    chainer.config.enable_backprop = True
-    for ep in range(epoch):
-        sum_loss = 0.0
-        startidx = np.random.randint(0,X.shape[0]-const.DECODER_TRAIN_SEQLEN-1,size=X.shape[0]//const.DECODER_TRAIN_SEQLEN*4)
-        for i in range(0,startidx.size,const.DECODER_TRAIN_BATCH):
-            x_batch_list = [cp.asarray(X[startidx[i:i+const.DECODER_TRAIN_BATCH]+j,:]) for j in range(const.DECODER_TRAIN_SEQLEN)]
-            t_batch_list = [cp.asarray(T[startidx[i:i+const.DECODER_TRAIN_BATCH]+j]) for j in range(const.DECODER_TRAIN_SEQLEN)]
-            opt.update(rnncrfmodel,x_batch_list,t_batch_list)
-            sum_loss += rnncrfmodel.loss.data * const.DECODER_TRAIN_BATCH
-        print("epoch %d/%d loss=%.3f" % (ep+1,epoch,sum_loss/12800.0))        
-    rnncrfmodel.save()
 
 
 def shift_data(feat,lab,shift):
@@ -354,9 +218,12 @@ def shift_data(feat,lab,shift):
     return newfeat,newlab
 
 
-def TrainNStepRNN(idx,epoch=20,modelfile=const.DEFAULT_CONVNETFILE,augment=0):
-    cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))[idx]
-    chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext=["lab","chords"]))[idx]
+def TrainNStepRNN(idx,epoch=20,featmodel=const.DEFAULT_CONVNETFILE,augment=0,savefile="blstm.model"):
+    cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))
+    chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext=["lab","chords"]))
+    if idx is not None:
+        cqtfilelist = cqtfilelist[idx]
+        chordlablist = chordlablist[idx]
     chainer.config.train=False
     chainer.config.enable_backprop = False
     #dnn = networks.TripleDNNExtractor()
@@ -364,7 +231,7 @@ def TrainNStepRNN(idx,epoch=20,modelfile=const.DEFAULT_CONVNETFILE,augment=0):
     dnn = networks.FullCNNFeatExtractor()
     #dnn = networks.NoOperation()
     #dnn = networks.ConvnetFeatExtractor()
-    dnn.load(modelfile)
+    dnn.load(featmodel)
     dnn.to_gpu(0)
     
     rnn = networks.NSBLSTM()
@@ -407,17 +274,20 @@ def TrainNStepRNN(idx,epoch=20,modelfile=const.DEFAULT_CONVNETFILE,augment=0):
             sum_loss += rnn.loss.data
             
         print("epoch %d/%d loss=%.3f" % (ep+1,epoch,sum_loss/12800.0))  
-        if(sum_loss/12800.0 < last_loss):
-            rnn.save()
-            last_loss = sum_loss/12800.0
+        if(sum_loss < last_loss):
+            rnn.save(savefile)
+            last_loss = sum_loss
         else:
             break
     #rnn.save()
 
 
-def TrainNStepCRF(idx,epoch=20,modelfile=const.DEFAULT_CONVNETFILE,augment=0):
-    cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))[idx]
-    chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext=["lab","chords"]))[idx]
+def TrainNStepCRF(idx,epoch=20,augment=0,featmodel=const.DEFAULT_CONVNETFILE,savemodel="nblstm_crf.model"):
+    cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))
+    chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext=["lab","chords"]))
+    if idx is not None:
+        cqtfilelist = cqtfilelist[idx]
+        chordlablist = chordlablist[idx]
     chainer.config.train=False
     chainer.config.enable_backprop = False
     #dnn = networks.TripleDNNExtractor()
@@ -425,7 +295,7 @@ def TrainNStepCRF(idx,epoch=20,modelfile=const.DEFAULT_CONVNETFILE,augment=0):
     dnn = networks.FullCNNFeatExtractor()
     #dnn = networks.NoOperation()
     #dnn = networks.ConvnetFeatExtractor()
-    dnn.load(modelfile)
+    dnn.load(featmodel)
     dnn.to_gpu(0)
     
     rnn = networks.NBLSTMCRF()
@@ -469,4 +339,4 @@ def TrainNStepCRF(idx,epoch=20,modelfile=const.DEFAULT_CONVNETFILE,augment=0):
             
         
         print("epoch %d/%d loss=%.3f" % (ep+1,epoch,sum_loss/12800.0))
-    rnn.save()
+        rnn.save(savemodel)

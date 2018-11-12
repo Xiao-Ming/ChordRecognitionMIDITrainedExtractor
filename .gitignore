@@ -8,6 +8,8 @@ logs/*
 *.wav
 *.zip
 *.model
+!fullcnn_crossentropy_6000.model
+!nblstm_crf.model
 *.png
 *.npy
 *.npz

@@ -13,7 +13,16 @@ import ChordVocabulary as voc
 from madmom.utils.midi import MIDIFile
 from madmom.utils import suppress_warnings
 from librosa.util import normalize,find_files
+import cupy
 import os
+
+def force_numpy(x):
+    xp = cupy.get_array_module(x)
+    if xp==np:
+        return np.array(x)
+    elif xp==cupy:
+        return cupy.asnumpy(x)
+    return None
 
 def PreprocessSpec(x):
     x_log = np.log(np.maximum(x,0.00001))
