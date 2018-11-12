@@ -218,7 +218,7 @@ def shift_data(feat,lab,shift):
     return newfeat,newlab
 
 
-def TrainNStepRNN(idx,epoch=20,featmodel=const.DEFAULT_CONVNETFILE,augment=0,savefile="blstm.model"):
+def TrainNStepRNN(idx,epoch=100,featmodel=const.DEFAULT_CONVNETFILE,augment=0,savefile="blstm.model"):
     cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))
     chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext=["lab","chords"]))
     if idx is not None:

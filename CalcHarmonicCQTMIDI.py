@@ -14,7 +14,7 @@ import const as C
 import utils
 import chromatemplate
 
-midilist = find_files(C.PATH_MIDI,ext="mid")[6000:6300]
+midilist = find_files(C.PATH_MIDI,ext="mid")
 
 itemcnt = len(midilist)
 i = 5000
