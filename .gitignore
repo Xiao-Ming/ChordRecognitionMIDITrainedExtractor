@@ -1,4 +1,7 @@
-Datas/*
+Datas/estimated/*
+Datas/estimated_cross/*
+Datas/estimated_cross_backup/*
+Datas/sonify/*
 MIREXresults/*
 __pycache__/*
 chainer2.0/*
