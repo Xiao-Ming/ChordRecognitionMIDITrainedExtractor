@@ -13,6 +13,7 @@ logs/*
 *.model
 !fullcnn_crossentropy_6000.model
 !nblstm_crf.model
+!blstm.model
 *.png
 *.npy
 *.npz

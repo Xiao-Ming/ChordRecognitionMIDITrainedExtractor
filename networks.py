@@ -191,7 +191,7 @@ class NBLSTMCRF(Chain):
             self.blstm = NSBLSTM()
             self.crf = L.CRF1d(const.N_CHORDS)
             #self.li = L.Linear(256,const.N_CHORDS)
-        self.blstm.load()
+        #self.blstm.load()
         #self.li.copyparams(self.blstm.out)
         #self.blstm.blstm.dropout = 0
     def __call__(self,xs,ts):
