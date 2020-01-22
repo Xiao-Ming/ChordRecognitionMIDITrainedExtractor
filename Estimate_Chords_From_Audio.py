@@ -34,13 +34,13 @@ for audiofile in audio_list:
     
     #extract Harmonic-CQT from audio
     fmin = note_to_hz("C1")
-    hcqt = spec = np.stack([np.abs(cqt(y,sr=C.SR,hop_length=C.H,n_bins=C.BIN_CNT,bins_per_octave=C.OCT_BIN,fmin=fmin*(h+1),filter_scale=2,tuning=None)).T.astype(np.float32) for h in range(C.CQT_H)])
+    hcqt = np.stack([np.abs(cqt(y,sr=C.SR,hop_length=C.H,n_bins=C.BIN_CNT,bins_per_octave=C.OCT_BIN,fmin=fmin*(h+1),filter_scale=2,tuning=None)).T.astype(np.float32) for h in range(C.CQT_H)])
     
     #extract feature using trained CNN extractor
     cnn_feat_extractor = N.FullCNNFeatExtractor()
     cnn_feat_extractor.load(args.f)
     
-    feat = cnn_feat_extractor.GetFeature(hcqt).data
+    feat = cnn_feat_extractor.GetFeature(U.PreprocessSpec(hcqt)).data
     
     #decode label sequence
     decoder = N.NBLSTMCRF()
