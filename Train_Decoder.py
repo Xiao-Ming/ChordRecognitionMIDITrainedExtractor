@@ -23,15 +23,15 @@ parser.add_argument("-a", help="Maximum amount of pitch shift applied to the tra
                     Default value is set to 5 (which means training datas are shifted for random amount between -5 and 5 semitones).",\
                     type=int, default=5, choices=[0,1,2,3,4,5,6], action="store")
 
-parser.add_augument("-e", help="Maximum training epochs for BLSTM and CRF model. 2 numbers are required. (default: 100,10)", \
-                    type=int, nargs=2, action="store")
+parser.add_argument("-e", help="Maximum training epochs for BLSTM and CRF model. 2 numbers are required. (default: 100,10)", \
+                    type=int, nargs=2, action="store", default=[100,10])
 
 args = parser.parse_args()
 
 
 #Check datas
 
-spec_filelist = find_files("Datas/spec_train", ext="npy")
+spec_filelist = find_files("Datas/specs_train", ext="npy")
 labs_filelist = find_files("Datas/labels_train", ext=["lab","chords"])
 
 
