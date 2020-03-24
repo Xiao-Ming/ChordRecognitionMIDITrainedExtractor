@@ -282,7 +282,7 @@ def TrainNStepRNN(idx,epoch=100,featmodel=const.DEFAULT_CONVNETFILE,augment=0,sa
     #rnn.save()
 
 
-def TrainNStepCRF(idx,epoch=20,augment=0,featmodel=const.DEFAULT_CONVNETFILE,path_blstm="blstm.model",savemodel="nblstm_crf.model"):
+def TrainNStepCRF(idx,epoch=20,augment=0,featmodel=const.DEFAULT_CONVNETFILE,path_blstm="blstm.model",savefile="nblstm_crf.model"):
     cqtfilelist = np.array(find_files(const.PATH_HCQT,ext="npy"))
     chordlablist = np.array(find_files(const.PATH_CHORDLAB,ext=["lab","chords"]))
     if idx is not None:
