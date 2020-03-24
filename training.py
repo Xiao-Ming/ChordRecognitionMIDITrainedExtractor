@@ -340,4 +340,4 @@ def TrainNStepCRF(idx,epoch=20,augment=0,featmodel=const.DEFAULT_CONVNETFILE,pat
             
         
         print("epoch %d/%d loss=%.3f" % (ep+1,epoch,sum_loss/12800.0))
-        rnn.save(savemodel)
+        rnn.save(savefile)
