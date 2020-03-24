@@ -12,7 +12,7 @@ from librosa.util import find_files
 import const as C
 import os
 
-audiolist = find_files("Datas/audio_train")
+audiolist = find_files("Datas/audios_train")
 
 path_hcqt = "Datas/specs_train"
 itemcnt = len(audiolist)
