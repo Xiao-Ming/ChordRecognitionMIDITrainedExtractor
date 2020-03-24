@@ -22,7 +22,7 @@ for audiofile in audiolist:
     print("Processing %d/%d" % (i,itemcnt))    
     wav,sr = load(audiofile,sr=C.SR)
     fmin = note_to_hz("C1")
-    spec = np.stack([np.abs(cqt(wav,sr=C.SR,hop_length=512,n_bins=C.BIN_CNT,bins_per_octave=C.OCT_BIN,fmin=fmin*(h+1),filter_scale=2,tuning=None)).T.astype(np.float32) for h in range(C.CQT_H)])
+    spec = np.stack([np.abs(cqt(wav,sr=C.SR,hop_length=C.H,n_bins=C.BIN_CNT,bins_per_octave=C.OCT_BIN,fmin=fmin*(h+1),filter_scale=2,tuning=None)).T.astype(np.float32) for h in range(C.CQT_H)])
     
     
     filename = audiofile.split('/')[-1].split(".")[0]
